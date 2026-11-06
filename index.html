@@ -1,413 +1,307 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>冷却水の遠隔監視 試作版</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=BIZ+UDPGothic:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: 左に施設の一覧（横断）、右に選んだ施設の詳細。狭い画面では縦に積む */
+/* Layout: 上に「3つの層で測る」、左に施設、右に選んだ施設の兆し。下に点検の置き換え・データ・その先 */
 :root {
-  --bg: #f3f5f6;
-  --panel: #ffffff;
-  --ink: #14232c;
-  --muted: #5b6b74;
-  --line: #d9e0e3;
-  --accent: #0e6e7e;
-  --accent-soft: #dcefF1;
-  --ok: #2f7d4f;
-  --warn: #a8670c;
-  --bad: #b3322b;
-  --chart-grid: #e6ebed;
+  --bg: #f3f5f6; --panel: #ffffff; --ink: #14232c; --muted: #5b6b74; --line: #d9e0e3;
+  --accent: #0e6e7e; --accent-soft: #dcf0f2; --ok: #2f7d4f; --warn: #a8670c; --bad: #b3322b;
+  --wall: #b3322b; --life: #a8670c; --water: #7a8a92; --grid: #e6ebed;
   --font-display: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", sans-serif;
   --font-body: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic", sans-serif;
-  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-data: "IBM Plex Mono", ui-monospace, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0f171b; --panel: #162228; --ink: #e3ecef; --muted: #93a6ae; --line: #2a3a41;
     --accent: #4fb8c6; --accent-soft: #1b3a40; --ok: #6cc28d; --warn: #e2a64a; --bad: #ee7a72;
-    --chart-grid: #22323a; color-scheme: dark;
+    --wall: #ee7a72; --life: #e2a64a; --water: #8fa1a9; --grid: #22323a; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f171b; --panel: #162228; --ink: #e3ecef; --muted: #93a6ae; --line: #2a3a41;
   --accent: #4fb8c6; --accent-soft: #1b3a40; --ok: #6cc28d; --warn: #e2a64a; --bad: #ee7a72;
-  --chart-grid: #22323a; color-scheme: dark;
+  --wall: #ee7a72; --life: #e2a64a; --water: #8fa1a9; --grid: #22323a; color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body {
-  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.7; word-break: auto-phrase;
-  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: 20px 40px;
-}
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.7;
+  word-break: auto-phrase; padding: 20px 16px 48px; }
 .wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 16px; }
-header.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
 h1 { font-family: var(--font-display); font-size: 1.6rem; margin: 0; letter-spacing: .02em; text-wrap: balance; }
-h1 small { font-size: .85rem; color: var(--muted); font-weight: 500; margin-left: .5em; }
-h2 { font-family: var(--font-display); font-size: 1.1rem; margin: 0; text-wrap: balance; }
-h3 { font-size: .95rem; margin: 0; }
+h2 { font-family: var(--font-display); font-size: 1.15rem; margin: 0; text-wrap: balance; }
+h3 { font-size: .98rem; margin: 0; }
+p { margin: 0; }
+.sub { color: var(--muted); }
 .notice { background: var(--accent-soft); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; font-size: .88rem; }
-.grid { display: grid; grid-template-columns: minmax(0, 330px) minmax(0, 1fr); gap: 16px; align-items: start; }
-@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
 .label { font-size: .75rem; letter-spacing: .08em; color: var(--muted); }
+.layers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 900px) { .layers { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media (max-width: 560px) { .layers { grid-template-columns: minmax(0, 1fr); } }
+.layer { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; }
+.layer.key { border-color: var(--wall); box-shadow: inset 0 3px 0 var(--wall); }
+.layer .tag { font-size: .72rem; font-weight: 700; color: var(--muted); }
+.layer.key .tag { color: var(--wall); }
+.layer p { font-size: .88rem; }
+.grid { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
 .fac { display: grid; gap: 8px; }
-.fac button {
-  all: unset; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 10px 12px;
-  border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
-}
+.fac button { all: unset; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 6px; }
 .fac button:hover { border-color: var(--accent); }
 .fac button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .fac button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
 .fac .name { font-weight: 700; }
-.fac .sub { font-size: .8rem; color: var(--muted); grid-column: 1 / -1; }
-.pill { font-size: .75rem; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; align-self: center; }
+.fac .meta { grid-column: 1 / -1; font-size: .8rem; color: var(--muted); }
+.pill { font-size: .75rem; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; align-self: center; white-space: nowrap; }
 .pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); }
-.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
-.kpi { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; display: grid; gap: 2px; }
-.kpi .v { font-family: var(--font-data); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
-.kpi .u { font-size: .75rem; color: var(--muted); }
-.kpi.flag { border-color: var(--warn); }
-.chart { width: 100%; height: auto; display: block; }
-.chart text { fill: var(--muted); font-family: var(--font-data); font-size: 11px; }
-.row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
-@media (max-width: 700px) { .row2 { grid-template-columns: minmax(0, 1fr); } }
-.alerts { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.alerts li { border-left: 3px solid var(--warn); padding: 6px 10px; background: var(--bg); border-radius: 0 6px 6px 0; font-size: .9rem; }
-.alerts li.bad { border-left-color: var(--bad); }
-.alerts li.ok { border-left-color: var(--ok); }
-.alerts b { display: block; }
-.sim { display: grid; gap: 10px; }
-.sim input[type=range] { width: 100%; accent-color: var(--accent); }
-.sim .inputs { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: .85rem; }
-.sim .inputs input { width: 6.5em; font-family: var(--font-data); padding: 2px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); }
-.result { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
-.result div { background: var(--bg); border-radius: 6px; padding: 8px 10px; }
-.result .v { font-family: var(--font-data); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
-.result .down { color: var(--ok); }
-.tbl-wrap { overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; font-size: .85rem; min-width: 560px; }
-th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
-td.n { font-family: var(--font-data); text-align: right; font-variant-numeric: tabular-nums; }
-th { color: var(--muted); font-weight: 400; font-size: .78rem; }
-.note { font-size: .78rem; color: var(--muted); }
-.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
-.tabs button { all: unset; cursor: pointer; font-size: .85rem; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); }
-.tabs button[aria-pressed="true"] { background: var(--accent); color: var(--panel); border-color: var(--accent); }
-.tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.hidden-sec[hidden] { display: none !important; }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 560px) { .kpis { grid-template-columns: minmax(0, 1fr); } }
+.kpi { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; display: grid; gap: 2px; }
+.kpi .v { font-family: var(--font-data); font-size: 1.6rem; font-weight: 500; line-height: 1.2; }
+.kpi .v small { font-size: .85rem; margin-left: 2px; }
+.kpi.hl { border-color: var(--wall); }
+.kpi.hl .v { color: var(--wall); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .82rem; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+svg text { font-family: var(--font-body); }
+.events { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.events li { display: grid; grid-template-columns: 4.5em 1fr; gap: 8px; font-size: .9rem; padding: 6px 0; border-top: 1px solid var(--line); }
+.events .d { font-family: var(--font-data); color: var(--muted); }
+.events .us { color: var(--wall); font-weight: 700; }
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th, td { text-align: left; padding: 8px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+th { font-size: .78rem; color: var(--muted); font-weight: 700; }
+.scroll { overflow-x: auto; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.heat td.n { font-family: var(--font-data); text-align: center; }
+.foot { font-size: .8rem; color: var(--muted); display: grid; gap: 4px; }
+.flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .88rem; }
+.flow span.b { border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; }
 </style>
-
+</head>
+<body>
 <div class="wrap">
-  <header class="top">
-    <h1>冷却水の遠隔監視 <small>試作版 v0.1</small></h1>
-    <span class="label">施設の水を、止めずに、見える化して減らす</span>
+  <header style="display:grid; gap:6px">
+    <h1>冷却水の遠隔監視 試作版</h1>
+    <p class="sub">水を測るだけでは、兆しは遅れて見えます。私たちは、配管の<b>壁</b>を測ります。</p>
+    <p class="notice">施設名・数値はすべて架空の見本データです。仕組みと画面の考え方をお見せするためのもので、実際の測定結果ではありません。</p>
   </header>
-  <p class="notice">この画面は<b>見本データ</b>で動く試作品です。施設名・水処理会社名・数値はすべて架空です。計算式は米国エネルギー省 連邦エネルギー管理プログラム（FEMP）の冷却塔の水の収支、液冷の基準は業界団体OCPの冷却液仕様 v1.3 にもとづきます。</p>
+
+  <section class="panel" aria-labelledby="h-layers">
+    <h2 id="h-layers">3つの層で測り、地域の水を重ねる</h2>
+    <div class="layers">
+      <div class="layer"><span class="tag">層1｜水を測る</span><h3>導電率・pH・水温・残留塩素・補給水の量</h3>
+        <p>市販のセンサーで測れます。大手の水処理会社も、すでに測っています。ここは差がつきません。</p></div>
+      <div class="layer key"><span class="tag">層2｜壁を測る（兆しが先に出る）</span><h3>配管の内側につく生物膜</h3>
+        <p>菌は水中に漂う前に、まず壁にぬめり（生物膜）をつくって増えます。壁に置いた電極に流れる電流の変化で、そのぬめりを常時とらえます。</p></div>
+      <div class="layer"><span class="tag">層3｜正解を測る</span><h3>菌の活動量と、レジオネラの遺伝子</h3>
+        <p>ATP検査（数分）と遺伝子検査（数時間）を定期に行い、「本当に菌が増えていたか」を確かめます。培養検査は結果まで<span style="white-space:nowrap">10〜12日</span>かかります。</p></div>
+      <div class="layer"><span class="tag">重ねる｜地域の水</span><h3>補給水（水道水）の硬さ・成分</h3>
+        <p>水道水の硬さは地域で大きく違います。同じ運転でも、地域によって汚れ方が変わるため、地域ごとに補正します。</p></div>
+    </div>
+  </section>
 
   <div class="grid">
-    <aside class="panel">
-      <div>
-        <div class="label">施設の一覧（水処理会社をまたいで横断）</div>
-      </div>
-      <div class="fac" id="facList"></div>
-      <p class="note">担当の水処理会社が違っても、データを同じ形にそろえて並べます。水処理の判断は各社が行い、この画面はその判断を助ける道具です。</p>
-    </aside>
+    <section class="panel" aria-labelledby="h-fac">
+      <h2 id="h-fac">見守っている施設</h2>
+      <p class="label">兆しの強い順に並びます</p>
+      <div class="fac" id="fac"></div>
+    </section>
 
-    <main class="panel" id="detail">
-      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:baseline">
+    <section class="panel" aria-labelledby="dName">
+      <div style="display:grid; gap:2px">
         <h2 id="dName"></h2>
-        <span class="note" id="dMeta"></span>
+        <p class="sub" id="dMeta" style="font-size:.88rem"></p>
       </div>
-      <div class="tabs" role="group" aria-label="表示の切り替え">
-        <button type="button" data-tab="now" aria-pressed="true">いまの状態</button>
-        <button type="button" data-tab="opt" aria-pressed="false">提案と試算</button>
-        <button type="button" data-tab="log" aria-pressed="false">点検を補う記録</button>
+      <div class="kpis" id="kpis"></div>
+      <div class="legend">
+        <span><i style="background:var(--wall)"></i>壁の生物膜（層2）</span>
+        <span><i style="background:var(--life)"></i>菌の活動量 ATP（層3）</span>
+        <span><i style="background:var(--water)"></i>水の指標 導電率（層1）</span>
       </div>
-
-      <section class="hidden-sec" id="sec-now">
-        <div class="kpis" id="kpis"></div>
-        <div>
-          <h3 id="chartTitle">導電率（水の汚れの濃さ）の推移・直近14日</h3>
-          <svg class="chart" id="chart" viewBox="0 0 640 220" role="img" aria-label="導電率の推移"></svg>
-          <p class="note" id="chartNote"></p>
-        </div>
-        <div>
-          <h3>知らせ</h3>
-          <ul class="alerts" id="alerts"></ul>
-        </div>
-      </section>
-
-      <section class="hidden-sec" id="sec-opt" hidden>
-        <div class="sim" id="simTower">
-          <h3>濃縮倍数を上げたときの試算</h3>
-          <p class="note">濃縮倍数＝循環水の汚れの濃さが、補給水の何倍か。上げるほど捨てる水（ブロー）が減るが、水あか・さびの危険が増す。AIは水質の推移から安全な上限を見積もり、少しずつ上げる計画を出します。</p>
-          <label for="cyc">目標の濃縮倍数：<b id="cycV" style="font-family:var(--font-data)"></b>（いま <span id="cycNow" style="font-family:var(--font-data)"></span>）</label>
-          <input type="range" id="cyc" min="2" max="8" step="0.1">
-          <div class="inputs">
-            <label>水道料金（円/m³）<input type="number" id="price" value="500" min="0" step="10"></label>
-            <label>薬品費（円/日・いま）<input type="number" id="chem" min="0" step="100"></label>
-            <label>うち、さび止め・水あか防止剤の割合（%）<input type="number" id="inhib" value="60" min="0" max="100" step="5"></label>
-          </div>
-          <div class="result" id="simOut"></div>
-          <p class="note" id="simWarn"></p>
-          <p class="note">計算の前提：補給水＝蒸発量×倍数÷(倍数−1)、ブロー＝蒸発量÷(倍数−1)（飛散は無視）。減るのは、ブローで捨てられる分に比例する「さび止め・水あか防止剤」だけとし、殺菌剤は変わらないとしました。料金・薬品費・割合は仮置きで、書き換えられます。</p>
-        </div>
-        <div class="sim" id="simLoop" hidden>
-          <h3>液冷の冷却液の基準チェック（OCP 仕様 v1.3）</h3>
-          <div class="tbl-wrap"><table id="ocpTbl"></table></div>
-          <p class="note">液冷は、チップに取り付けた冷却板に冷却液を流す方式。冷却板の流路は数百ミクロンと細く、汚れやさびで詰まると高価なGPUが止まります。</p>
-        </div>
-      </section>
-
-      <section class="hidden-sec" id="sec-log" hidden>
-        <h3>法定点検を補う連続記録（自動）</h3>
-        <div class="tbl-wrap"><table id="logTbl"></table></div>
-        <p class="note">ビル管理法のレジオネラ対策の指針では、冷却塔・冷却水は月1回以内の点検が求められます。センサーの連続記録で、月1回の目視点検を補います。</p>
-      </section>
-    </main>
+      <div class="legend">
+        <span><i style="background:var(--wall); width:3px; height:12px"></i>私たちが気づいた日</span>
+        <span><i style="background:var(--muted); width:3px; height:12px"></i>これまでの方法で分かる日</span>
+        <span><i style="background:repeating-linear-gradient(var(--muted) 0 2px, transparent 2px 5px); width:2px; height:12px"></i>月1回の目視点検</span>
+      </div>
+      <div id="chart" role="img" aria-label="60日間の推移。縦軸は普段の値を1としたときの倍率"></div>
+      <ul class="events" id="events"></ul>
+    </section>
   </div>
 
-  <section class="panel">
-    <h2>施設の横断比較</h2>
-    <div class="tbl-wrap"><table id="cmpTbl"></table></div>
-    <p class="note">比べるのは施設どうしです。「冷却1kWあたりの補給水」は、規模が違う施設を同じ物差しで比べるために試作した指標です。改善の余地が大きい施設から、担当の水処理会社と一緒に手を打てます。</p>
+  <div class="two">
+    <section class="panel" aria-labelledby="h-insp">
+      <h2 id="h-insp">月1回の点検を、常時の監視で置き換える</h2>
+      <p class="sub" style="font-size:.9rem">ビル管理法の施行規則（第3条の18）が定める冷却塔の点検と、常時の監視でできることの対応です。置き換えは、まだ認められていません。国の制度（規制のサンドボックス）で実証したい内容です。</p>
+      <div class="scroll"><table>
+        <tr><th>今の決まり</th><th>常時の監視でできること</th><th>扱い</th></tr>
+        <tr><td>冷却塔・冷却水の汚れの状況を、1か月以内ごとに点検</td><td>壁の生物膜・菌の活動量・水の指標を、毎日記録。兆しが出た日に知らせる</td><td><span class="pill warn">置き換えを実証したい</span></td></tr>
+        <tr><td>必要に応じて清掃・水の入れ替え</td><td>清掃が要る時期を、汚れの進み方から前もって示す</td><td><span class="pill ok">時期を最適にする</span></td></tr>
+        <tr><td>冷却塔・配管の清掃を、1年以内ごとに1回</td><td>清掃そのものは人が行う。前後の汚れの差を記録し、効果を残す</td><td><span class="pill ok">人が行う（記録で補う）</span></td></tr>
+      </table></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-data">
+      <h2 id="h-data">会社をまたいで結ぶ記録</h2>
+      <p class="sub" style="font-size:.9rem">壁の兆し・正解の検査・地域の水・設備に起きたことを、一つの記録として結びます。統計に使うのは、施設と水処理会社の両方に同意をいただいた記録だけです。水処理会社の名前を出した比較はしません。</p>
+      <div class="scroll"><table class="heat" id="heat"></table></div>
+      <div class="flow" aria-label="データが増えるほど当たる仕組み">
+        <span class="b">施設が増える</span>→<span class="b">兆しと正解の組が増える</span>→<span class="b">地域ごとの予測が当たる</span>→<span class="b">誤報が減り、選ばれる</span>→<span class="b">施設が増える</span>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="h-next">
+    <h2 id="h-next">その先：見抜く技術で、水を生む</h2>
+    <p class="sub" style="font-size:.9rem">冷却塔は、濃くなった水を捨てて（ブロー）、新しい水を足し続けています。捨てる水を再生して戻すとき、何をどれだけ取り除けばよいかは、水の中身を見抜いていないと決められません。監視のデータが、水を生む装置の運転を決めます。</p>
+    <div class="kpis" id="nextKpis"></div>
   </section>
+
+  <footer class="foot">
+    <p>根拠：生物膜の中のレジオネラの増加は、水中より先に起きる（英シェフィールド大学, 2026）。培養検査は結果まで10〜12日。水道水の硬さの地域差（東京大学, 全国1,564地点）。冷却塔の点検は建築物衛生法 施行規則 第3条の18。</p>
+    <p>壁の生物膜を電極で測るセンサーは、市販品があります。私たちの強みは、センサーそのものではなく、3つの層と地域の水を結んだ記録と、それを貯められる立場です。</p>
+    <p>株式会社No.Service　見本データによる試作版（2026年11月）</p>
+  </footer>
 </div>
 
 <script>
 (function () {
-  document.documentElement.lang = "ja";
-  // 見本データ：架空の施設。seed つきの疑似乱数で毎回同じ値を出す
+  "use strict";
+  const DAYS = 60;
   function rng(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
-  const FACS = [
-    { id: "a", name: "駅ビルA", area: "仙台・想定", vendor: "水処理会社X", type: "tower", kw: 1800, evap: 38, cycNow: 3.0, makeupCond: 150, seed: 11, chem: 2500, drift: 0 },
-    { id: "b", name: "駅ビルB", area: "首都圏・想定", vendor: "水処理会社Y", type: "tower", kw: 2600, evap: 55, cycNow: 2.6, makeupCond: 190, seed: 23, chem: 3600, drift: 0.14 },
-    { id: "c", name: "車両センターC", area: "東北・想定", vendor: "水処理会社Z", type: "tower", kw: 900, evap: 19, cycNow: 4.2, makeupCond: 120, seed: 37, chem: 1200, drift: 0, orpLow: true },
-    { id: "d", name: "AI拠点D", area: "当社の想定例・液冷", vendor: "水処理会社X", type: "loop", kw: 500, seed: 51 }
+
+  // 見本の施設。ev：生物膜が増え始める日（null は異常なし）。fa：誤報（壁は動いたが正解の検査で否定）
+  const FAC = [
+    { id: "a", name: "仙台・駅ビルA", use: "商業施設", region: "東北", hard: 38, ev: 26, cool: 900 },
+    { id: "f", name: "長野・工場F", use: "工場", region: "中部", hard: 52, ev: 18, cool: 1600 },
+    { id: "c", name: "青森・病院C", use: "病院", region: "東北", hard: 31, ev: 40, cool: 700 },
+    { id: "e", name: "福岡・データセンターE", use: "データセンター", region: "九州", hard: 60, ev: null, fa: 30, cool: 2400 },
+    { id: "b", name: "東京・オフィスB", use: "オフィス", region: "関東", hard: 84, ev: null, cool: 1200 },
+    { id: "d", name: "大阪・ホテルD", use: "ホテル", region: "近畿", hard: 47, ev: null, cool: 1000 },
   ];
-  const LIMIT_COND = 1200; // 導電率の上限の目安（µS/cm）。補給水の水質と薬品で変わる仮置き
 
-  // 14日分の時系列を作る
-  FACS.forEach(f => {
-    const r = rng(f.seed);
-    if (f.type === "tower") {
-      const target = f.makeupCond * f.cycNow;
-      f.series = Array.from({ length: 14 * 4 }, (_, i) => {
-        let v = target * (0.94 + r() * 0.12);
-        if (f.id === "a" && i > 44) v *= 1 + (i - 44) * 0.022; // A：最後の3日で上昇
-        return Math.round(v);
-      });
-      f.cond = f.series[f.series.length - 1];
-      f.ph = +(8.0 + r() * 0.5).toFixed(2);
-      f.orp = f.orpLow ? 410 : Math.round(560 + r() * 60);
-      f.temp = +(29 + r() * 3).toFixed(1);
-      f.makeup = f.evap * f.cycNow / (f.cycNow - 1);
-      f.blow = f.evap / (f.cycNow - 1);
-      f.makeupMeasured = f.makeup * (1 + f.drift); // B は補給水の実測が理論より多い＝漏れの疑い
-    } else {
-      f.series = Array.from({ length: 14 * 4 }, (_, i) => +(9.6 - i * 0.012 - r() * 0.05).toFixed(2));
-      f.ph = f.series[f.series.length - 1];
-      f.condL = Math.round(1380 + r() * 120);
-      f.hard = Math.round(12 + r() * 6);
-      f.bact = 0;
-      f.cu = +(0.08 + r() * 0.04).toFixed(2);
-      f.fe = +(0.04 + r() * 0.02).toFixed(2);
-      f.pg = +(23.5 + r() * 1).toFixed(1);
+  function series(f) {
+    const r = rng(f.hard * 131 + f.name.length * 7);
+    const wall = [], life = [], water = [];
+    for (let d = 0; d < DAYS; d++) {
+      let w = 1 + (r() - .5) * .12, l = 1 + (r() - .5) * .18, c = 1 + (r() - .5) * .06;
+      if (f.ev != null && d > f.ev) { const t = d - f.ev; w += 0.09 * t + 0.0016 * t * t * 3; }
+      if (f.ev != null && d > f.ev + 8) { const t = d - f.ev - 8; l += 0.11 * t; }
+      if (f.fa != null && d > f.fa && d < f.fa + 9) { w += 0.6 * Math.sin((d - f.fa) / 9 * Math.PI); }
+      wall.push(w); life.push(l); water.push(c);
     }
-    f.alerts = buildAlerts(f);
-    f.level = f.alerts.some(a => a.lv === "bad") ? "bad" : f.alerts.some(a => a.lv === "warn") ? "warn" : "ok";
-  });
-
-  function buildAlerts(f) {
-    const out = [];
-    if (f.type === "tower") {
-      const s = f.series, last = s.slice(-12), prev = s.slice(-24, -12);
-      const rise = avg(last) / avg(prev) - 1;
-      if (rise > 0.05) {
-        const perDay = (s[s.length - 1] - s[s.length - 13]) / 3;
-        const days = perDay > 0 ? Math.max(1, Math.round((LIMIT_COND - s[s.length - 1]) / perDay)) : null;
-        out.push({ lv: "warn", t: "導電率の上昇が速い：水あかの兆し", d: `直近3日で約${Math.round(rise * 100)}%上昇。${days ? `このままの傾きだと約${days}日で上限の目安に届く予測です。` : ""}ブロー弁の詰まりか、補給水の水質の変化が考えられます。ブロー弁の点検を提案します。` });
-      }
-      if (f.drift > 0.1) out.push({ lv: "bad", t: "補給水が計算より多い：漏れの疑い", d: `補給水の実測が、導電率の比から計算した量より約${Math.round(f.drift * 100)}%多い状態が続いています。配管やオーバーフローの点検を提案します。` });
-      if (f.orp < 450) out.push({ lv: "warn", t: "殺菌の効きが下がっている（ORP低下）", d: "殺菌剤の残りが少ない兆し。レジオネラ対策として、薬品の補充と注入ポンプの確認を提案します。" });
-      if (f.cond > LIMIT_COND) out.push({ lv: "bad", t: "導電率が上限の目安を超過", d: "水あか・さびの危険が高い状態です。" });
-      if (!out.length) out.push({ lv: "ok", t: "異常なし", d: "水質・水量とも普段どおりです。" });
-    } else {
-      const drop = f.series[0] - f.ph;
-      out.push({ lv: "warn", t: "冷却液のpHが少しずつ下がっている", d: `14日で${drop.toFixed(2)}低下（基準の下限は8.0）。不凍液の劣化の兆し。このペースだと約${Math.round((f.ph - 8.0) / (drop / 14))}日で下限に届く見込みです。採取して分析することを提案します。` });
-    }
-    return out;
-  }
-  function avg(a) { return a.reduce((x, y) => x + y, 0) / a.length; }
-  const yen = n => Math.round(n).toLocaleString("ja-JP");
-
-  // 施設の一覧
-  const list = document.getElementById("facList");
-  const LV = { ok: "正常", warn: "注意", bad: "要対応" };
-  FACS.forEach(f => {
-    const b = document.createElement("button");
-    b.type = "button"; b.dataset.id = f.id; b.setAttribute("aria-pressed", "false");
-    b.innerHTML = `<span class="name">${f.name}</span><span class="pill ${f.level}">${LV[f.level]}</span><span class="sub">${f.area}・${f.type === "tower" ? "冷却塔" : "液冷の配管"}・担当 ${f.vendor}</span>`;
-    b.addEventListener("click", () => select(f.id));
-    list.appendChild(b);
-  });
-
-  // タブ
-  let tab = "now";
-  document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
-    tab = b.dataset.tab;
-    document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
-    ["now", "opt", "log"].forEach(t => document.getElementById("sec-" + t).hidden = t !== tab);
-  }));
-
-  let cur;
-  function select(id) {
-    cur = FACS.find(f => f.id === id);
-    list.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.id === id)));
-    try { localStorage.setItem("wb-fac", id); } catch (e) {}
-    document.getElementById("dName").textContent = `${cur.name}（${cur.area}）`;
-    document.getElementById("dMeta").textContent = `担当 ${cur.vendor}・冷却能力 ${cur.kw.toLocaleString()} kW・15分ごとに更新（見本）`;
-    renderKpis(); renderChart(); renderAlerts(); renderSim(); renderLog();
+    return { wall, life, water };
   }
 
-  function kpi(label, v, u, flag) { return `<div class="kpi${flag ? " flag" : ""}"><span class="label">${label}</span><span class="v">${v}</span><span class="u">${u}</span></div>`; }
-  function renderKpis() {
-    const f = cur, el = document.getElementById("kpis");
-    if (f.type === "tower") {
-      el.innerHTML = [
-        kpi("濃縮倍数（実測）", (f.cond / f.makeupCond).toFixed(1), `倍・設定 ${f.cycNow.toFixed(1)}`),
-        kpi("導電率", f.cond.toLocaleString(), "µS/cm", f.cond > f.makeupCond * f.cycNow * 1.1),
-        kpi("pH", f.ph.toFixed(2), "（7が中性）"),
-        kpi("ORP", f.orp, "mV・殺菌の効き", f.orp < 450),
-        kpi("水温", f.temp.toFixed(1), "℃"),
-        kpi("補給水", f.makeupMeasured.toFixed(1), "m³/日", f.drift > 0.1),
-        kpi("ブロー", f.blow.toFixed(1), "m³/日・捨てる水"),
-        kpi("薬品費", yen(f.chem), "円/日")
-      ].join("");
-    } else {
-      el.innerHTML = [
-        kpi("pH", f.ph.toFixed(2), "基準 8.0〜10.5", f.ph < 8.5),
-        kpi("導電率", f.condL.toLocaleString(), "µS/cm・基準 2,000未満"),
-        kpi("不凍液（PG）", f.pg.toFixed(1), "%・推奨 25%"),
-        kpi("銅", f.cu, "ppm・基準 0.2未満"),
-        kpi("鉄", f.fe, "ppm・基準 0.1未満"),
-        kpi("細菌", "<1", "CFU/ml・基準 1未満")
-      ].join("");
+  // 壁の兆し：普段の値の1.5倍を2日続けて超えた日
+  function detectWall(s) { for (let d = 1; d < DAYS; d++) if (s.wall[d] > 1.5 && s.wall[d - 1] > 1.5) return d; return null; }
+  const SAMPLE = [14, 28, 42, 56];        // 水の培養検査の採水日
+  const INSPECT = [5, 35];                // 月1回の目視点検
+
+  function analyze(f) {
+    const s = series(f), wd = detectWall(s);
+    let bulkDay = null, cultureDay = null, missed = [];
+    if (f.ev != null) {
+      bulkDay = f.ev + 16;                                  // 水中の菌が検査で分かる水準に届く日
+      const sd = SAMPLE.find(x => x >= bulkDay);
+      cultureDay = sd != null ? sd + 11 : null;            // 培養の結果が出る日
+      missed = INSPECT.filter(x => x > f.ev);
     }
+    const lead = (wd != null && cultureDay != null) ? cultureDay - wd : null;
+    let level = "ok";
+    if (f.ev != null) level = "bad"; else if (f.fa != null) level = "warn";
+    return { s, wd, bulkDay, cultureDay, missed, lead, level };
   }
 
-  function renderChart() {
-    const f = cur, svg = document.getElementById("chart");
-    const W = 640, H = 220, L = 52, R = 12, T = 12, B = 28;
-    const s = f.series;
-    let lo, hi, ref, refLabel;
-    if (f.type === "tower") {
-      ref = f.makeupCond * f.cycNow; refLabel = "設定値";
-      lo = Math.floor(Math.min(...s, ref) * 0.9 / 50) * 50; hi = Math.ceil(Math.max(...s, ref) * 1.08 / 50) * 50;
-      document.getElementById("chartTitle").textContent = "導電率（水の汚れの濃さ）の推移・直近14日";
-      document.getElementById("chartNote").textContent = "点線はブローを始める設定値。設定値を超えて上がり続けると、捨てる水の量が足りていない合図です。";
-    } else {
-      ref = 8.0; refLabel = "下限 8.0";
-      lo = 7.8; hi = 9.8;
-      document.getElementById("chartTitle").textContent = "冷却液のpHの推移・直近14日";
-      document.getElementById("chartNote").textContent = "点線はOCP仕様の下限。下がり続けると、銅や真ちゅうの部品がさびやすくなります。";
-    }
-    const x = i => L + (W - L - R) * i / (s.length - 1);
-    const y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+  const A = {}; FAC.forEach(f => A[f.id] = analyze(f));
+  const order = FAC.slice().sort((x, y) => ({ bad: 0, warn: 1, ok: 2 }[A[x.id].level] - { bad: 0, warn: 1, ok: 2 }[A[y.id].level]));
+  const LABEL = { bad: "壁に兆し", warn: "確認済み・誤報", ok: "異常なし" };
+
+  const facEl = document.getElementById("fac");
+  facEl.innerHTML = order.map(f => `<button type="button" data-id="${f.id}" aria-pressed="false">
+      <span class="name">${f.name}</span><span class="pill ${A[f.id].level}">${LABEL[A[f.id].level]}</span>
+      <span class="meta">${f.use}｜補給水の硬さ ${f.hard} mg/L（${f.region}）</span></button>`).join("");
+  facEl.addEventListener("click", e => { const b = e.target.closest("button"); if (b) select(b.dataset.id); });
+
+  function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+  function chart(f, a) {
+    const W = 760, H = 260, L = 40, R = 12, T = 12, B = 28, max = 4;
+    const x = d => L + (W - L - R) * d / (DAYS - 1), y = v => T + (H - T - B) * (1 - Math.min(v, max) / max);
+    const path = arr => arr.map((v, d) => (d ? "L" : "M") + x(d).toFixed(1) + " " + y(v).toFixed(1)).join(" ");
     let g = "";
-    const ticks = 4;
-    for (let k = 0; k <= ticks; k++) {
-      const v = lo + (hi - lo) * k / ticks, yy = y(v);
-      g += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="var(--chart-grid)" stroke-width="1"/>`;
-      g += `<text x="${L - 6}" y="${yy + 4}" text-anchor="end">${f.type === "tower" ? Math.round(v) : v.toFixed(1)}</text>`;
-    }
-    [0, 7, 13].forEach(d => { const i = Math.min(s.length - 1, d * 4); g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${d === 13 ? "今日" : (13 - d) + "日前"}</text>`; });
-    const pts = s.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-    const area = `${L},${y(lo)} ${pts} ${x(s.length - 1)},${y(lo)}`;
-    g += `<polygon points="${area}" fill="var(--accent)" fill-opacity="0.10"/>`;
-    g += `<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/>`;
-    g += `<line x1="${L}" x2="${W - R}" y1="${y(ref)}" y2="${y(ref)}" stroke="var(--warn)" stroke-dasharray="5 4" stroke-width="1.5"/>`;
-    g += `<text x="${W - R}" y="${y(ref) - 5}" text-anchor="end">${refLabel}</text>`;
-    const last = s[s.length - 1];
-    g += `<circle cx="${x(s.length - 1)}" cy="${y(last)}" r="4" fill="var(--accent)"/>`;
-    svg.innerHTML = g;
+    for (let v = 0; v <= max; v++) g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${css("--grid")}"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="${css("--muted")}">${v}倍</text>`;
+    for (let d = 0; d < DAYS; d += 10) g += `<text x="${x(d)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="${css("--muted")}">${d}日</text>`;
+    let m = "";
+    INSPECT.forEach(d => m += `<line x1="${x(d)}" x2="${x(d)}" y1="${T}" y2="${H - B}" stroke="${css("--muted")}" stroke-dasharray="2 4"/>`);
+    if (a.wd != null) m += `<line x1="${x(a.wd)}" x2="${x(a.wd)}" y1="${T}" y2="${H - B}" stroke="${css("--wall")}" stroke-width="2"/>`;
+    if (a.cultureDay != null && a.cultureDay < DAYS) m += `<line x1="${x(a.cultureDay)}" x2="${x(a.cultureDay)}" y1="${T}" y2="${H - B}" stroke="${css("--muted")}" stroke-width="2"/>`;
+    const lifePts = a.s.life.map((v, d) => d % 7 === 3 ? `<circle cx="${x(d)}" cy="${y(v)}" r="3.5" fill="${css("--life")}"/>` : "").join("");
+    document.getElementById("chart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${g}${m}
+      <path d="${path(a.s.water)}" fill="none" stroke="${css("--water")}" stroke-width="2"/>
+      <path d="${path(a.s.life)}" fill="none" stroke="${css("--life")}" stroke-width="1.5" stroke-dasharray="4 3"/>${lifePts}
+      <path d="${path(a.s.wall)}" fill="none" stroke="${css("--wall")}" stroke-width="2.5"/></svg>`;
   }
 
-  function renderAlerts() {
-    document.getElementById("alerts").innerHTML = cur.alerts.map(a => `<li class="${a.lv}"><b>${a.t}</b>${a.d}</li>`).join("");
-  }
-
-  function renderSim() {
-    const f = cur;
-    document.getElementById("simTower").hidden = f.type !== "tower";
-    document.getElementById("simLoop").hidden = f.type !== "loop";
-    if (f.type === "tower") {
-      const cyc = document.getElementById("cyc");
-      const safeMax = Math.min(8, LIMIT_COND / f.makeupCond);
-      cyc.min = f.cycNow.toFixed(1);
-      cyc.value = Math.min(safeMax, f.cycNow + 1.5).toFixed(1);
-      document.getElementById("cycNow").textContent = f.cycNow.toFixed(1);
-      document.getElementById("chem").value = f.chem;
-      calc();
+  function select(id) {
+    const f = FAC.find(z => z.id === id), a = A[id];
+    facEl.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.id === id));
+    document.getElementById("dName").textContent = f.name;
+    document.getElementById("dMeta").textContent = `${f.use}｜冷却塔の能力 約${f.cool} kW｜補給水の硬さ ${f.hard} mg/L（${f.region}）｜60日間の記録`;
+    const k = [];
+    if (f.ev != null) {
+      k.push(`<div class="kpi hl"><span class="label">壁の兆しに気づいた日</span><span class="v">${a.wd}<small>日目</small></span></div>`);
+      k.push(`<div class="kpi"><span class="label">これまでの方法で分かる日（培養の結果）</span><span class="v">${a.cultureDay}<small>日目</small></span></div>`);
+      k.push(`<div class="kpi hl"><span class="label">先回りできた日数</span><span class="v">${a.lead}<small>日</small></span></div>`);
+    } else if (f.fa != null) {
+      k.push(`<div class="kpi"><span class="label">壁の値が一時的に上昇</span><span class="v">${a.wd}<small>日目</small></span></div>`);
+      k.push(`<div class="kpi"><span class="label">正解の検査（ATP・遺伝子）</span><span class="v">陰性</span></div>`);
+      k.push(`<div class="kpi"><span class="label">扱い</span><span class="v" style="font-size:1.1rem">誤報として学習</span></div>`);
     } else {
-      const rows = [
-        ["pH", f.ph.toFixed(2), "8.0〜10.5", f.ph >= 8 && f.ph <= 10.5],
-        ["導電率（µS/cm）", f.condL, "2,000未満", f.condL < 2000],
-        ["全硬度（ppm）", f.hard, "30未満", f.hard < 30],
-        ["細菌（CFU/ml）", "<1", "1未満", true],
-        ["銅（ppm）", f.cu, "0.2未満", f.cu < 0.2],
-        ["鉄（ppm）", f.fe, "0.1未満", f.fe < 0.1]
-      ];
-      document.getElementById("ocpTbl").innerHTML = "<tr><th>項目</th><th>いまの値</th><th>OCPの基準</th><th>判定</th></tr>" +
-        rows.map(r => `<tr><td>${r[0]}</td><td class="n">${r[1]}</td><td>${r[2]}</td><td><span class="pill ${r[3] ? "ok" : "bad"}">${r[3] ? "基準内" : "基準外"}</span></td></tr>`).join("");
+      k.push(`<div class="kpi"><span class="label">壁の生物膜</span><span class="v">普段どおり</span></div>`);
+      k.push(`<div class="kpi"><span class="label">菌の活動量</span><span class="v">普段どおり</span></div>`);
+      k.push(`<div class="kpi"><span class="label">次の清掃の目安</span><span class="v">${Math.round(120 + f.hard)}<small>日後</small></span></div>`);
     }
-  }
+    document.getElementById("kpis").innerHTML = k.join("");
+    chart(f, a);
 
-  function calc() {
-    const f = cur; if (!f || f.type !== "tower") return;
-    const c = +document.getElementById("cyc").value;
-    const price = +document.getElementById("price").value || 0;
-    const chem = +document.getElementById("chem").value || 0;
-    const inhib = Math.min(100, Math.max(0, +document.getElementById("inhib").value || 0)) / 100;
-    document.getElementById("cycV").textContent = c.toFixed(1);
-    const m0 = f.evap * f.cycNow / (f.cycNow - 1), b0 = f.evap / (f.cycNow - 1);
-    const m1 = f.evap * c / (c - 1), b1 = f.evap / (c - 1);
-    const dm = (m0 - m1) * 365, chem1 = chem * (1 - inhib) + chem * inhib * b1 / b0;
-    const saveYen = dm * price + (chem - chem1) * 365;
-    const pct = (a, b) => Math.round((1 - b / a) * 100);
-    document.getElementById("simOut").innerHTML = [
-      ["補給水", `${pct(m0, m1)}%減`, `年 ${yen(dm)} m³`],
-      ["ブロー（捨てる水）", `${pct(b0, b1)}%減`, `${b0.toFixed(1)} → ${b1.toFixed(1)} m³/日`],
-      ["薬品", `${pct(chem, chem1)}%減`, `年 ${yen((chem - chem1) * 365)} 円`],
-      ["合計の削減額", `年 ${yen(saveYen)} 円`, "水道代＋薬品費"]
-    ].map(r => `<div><span class="label">${r[0]}</span><div class="v down">${r[1]}</div><span class="note">${r[2]}</span></div>`).join("");
-    const condAt = f.makeupCond * c, safeMax = LIMIT_COND / f.makeupCond;
-    document.getElementById("simWarn").innerHTML = c > safeMax
-      ? `<b style="color:var(--bad)">注意：</b>この倍数だと導電率が約${yen(condAt)} µS/cmになり、上限の目安（${LIMIT_COND.toLocaleString()}）を超えます。水あか・さびの危険が高く、薬品の変更が必要です。`
-      : `この倍数での導電率は約${yen(condAt)} µS/cm。上限の目安（${LIMIT_COND.toLocaleString()}）の内側です。AIは一度に上げず、1週間ごとに0.2倍ずつ上げて水質を確かめる計画を出します。`;
-  }
-  ["cyc", "price", "chem", "inhib"].forEach(id => document.getElementById(id).addEventListener("input", calc));
-
-  function renderLog() {
-    const f = cur, today = new Date();
-    const fmt = d => `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
-    const rows = [];
-    for (let k = 0; k < 4; k++) {
-      const d = new Date(today.getFullYear(), today.getMonth() - k, 0); // 前の月の末日から順に
-      const ok = !(k === 0 && f.level !== "ok");
-      rows.push(`<tr><td>${fmt(d)}</td><td>${f.type === "tower" ? "冷却水の水質（連続記録の月まとめ）" : "冷却液の基準チェック"}</td><td>${f.type === "tower" ? "導電率・pH・ORP・水温・補給水・ブロー" : "pH・導電率・硬度・細菌・銅・鉄"}</td><td><span class="pill ${ok ? "ok" : "warn"}">${ok ? "記録済み・基準内" : "記録済み・要確認あり"}</span></td></tr>`);
+    const ev = [];
+    INSPECT.forEach(d => ev.push([d, `月1回の目視点検：${f.ev != null && d > f.ev ? "見た目では異常なし（壁の中で菌は増えている）" : "異常なし"}`, false]));
+    if (f.ev != null) ev.push([a.wd, "壁の生物膜が普段の1.5倍を超え、担当の方に通知。水の指標（導電率）はまだ普段どおり", true]);
+    if (f.ev != null) {
+      ev.push([a.wd + 2, "ATP検査で菌の活動量を確認。遺伝子検査を依頼", true]);
+      ev.push([a.bulkDay, "水中の菌が、検査で分かる水準に届く", false]);
+      if (a.cultureDay != null) ev.push([a.cultureDay, "これまでの方法：水の培養検査の結果が出て、初めて分かる", false]);
     }
-    document.getElementById("logTbl").innerHTML = "<tr><th>日付</th><th>記録</th><th>項目</th><th>状態</th></tr>" + rows.join("");
+    if (f.fa != null) ev.push([a.wd, "壁の値が一時的に上昇。ATP・遺伝子の検査で陰性を確認し、誤報として記録（次の予測に生かす）", true]);
+    ev.sort((p, q) => p[0] - q[0]);
+    document.getElementById("events").innerHTML = ev.map(([d, t, us]) => `<li><span class="d">${d}日目</span><span class="${us ? "us" : ""}">${t}</span></li>`).join("");
+
+    // 捨てている水（ブロー）の見本試算：蒸発量≒放熱量÷2,400kJ/kg、濃縮倍数4、夏中心で年1,500時間の運転
+    const evapM3 = f.cool * 0.5 * 1500 * 3600 / 2400 / 1000;   // 平均負荷50%
+    const blow = evapM3 / (4 - 1);
+    document.getElementById("nextKpis").innerHTML =
+      `<div class="kpi"><span class="label">この施設が1年に捨てている水（見本の試算）</span><span class="v">${Math.round(blow).toLocaleString()}<small>m³</small></span></div>
+       <div class="kpi"><span class="label">再生して戻せたときの補給水の削減</span><span class="v">${Math.round(blow * 0.7).toLocaleString()}<small>m³</small></span></div>
+       <div class="kpi"><span class="label">再生の条件を決めるデータ</span><span class="v" style="font-size:1rem">硬さ・シリカ・生物膜・菌</span></div>`;
   }
 
-  // 横断比較
-  const towers = FACS.filter(f => f.type === "tower");
-  document.getElementById("cmpTbl").innerHTML = "<tr><th>施設</th><th>濃縮倍数（設定）</th><th>補給水（m³/日）</th><th>冷却1kWあたり補給水（L/日）</th><th>状態</th></tr>" +
-    towers.map(f => `<tr><td>${f.name}</td><td class="n">${f.cycNow.toFixed(1)}</td><td class="n">${f.makeupMeasured.toFixed(1)}</td><td class="n">${(f.makeupMeasured * 1000 / f.kw).toFixed(1)}</td><td><span class="pill ${f.level}">${LV[f.level]}</span></td></tr>`).join("") +
-    `<tr><td>AI拠点D</td><td colspan="3">液冷（閉じた配管）。補給水はほぼゼロ。水質で管理</td><td><span class="pill ${FACS[3].level}">${LV[FACS[3].level]}</span></td></tr>`;
+  // 地域×できごと の記録の数（見本）
+  const REG = [["東北", 41, 12, 9, 6], ["関東", 63, 18, 22, 8], ["中部", 28, 9, 7, 4], ["近畿", 35, 10, 11, 5], ["九州", 22, 6, 5, 3]];
+  document.getElementById("heat").innerHTML = "<tr><th>地域</th><th>施設</th><th>壁の兆し→菌を確認</th><th>汚れ・水あか</th><th>誤報（学習に使う）</th></tr>" +
+    REG.map(r => `<tr><td>${r[0]}</td>${r.slice(1).map(n => `<td class="n">${n}</td>`).join("")}</tr>`).join("") +
+    `<tr><td colspan="5" class="sub" style="font-size:.8rem">数はすべて見本です。実証を通じて、最初の本物の記録をつくります。</td></tr>`;
 
-  let start = "a";
-  try { const s = localStorage.getItem("wb-fac"); if (s && FACS.some(f => f.id === s)) start = s; } catch (e) {}
-  select(start);
+  select(order[0].id);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => select(document.querySelector('.fac [aria-pressed="true"]').dataset.id));
 })();
 </script>
+</body>
+</html>
