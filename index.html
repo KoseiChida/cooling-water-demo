@@ -80,7 +80,7 @@ th { font-size: .78rem; color: var(--muted); font-weight: 700; }
 .scroll { overflow-x: auto; }
 .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
-.heat td.n { font-family: var(--font-data); text-align: center; }
+.heat td.n, #riskTable td.n { font-family: var(--font-data); text-align: center; }
 .foot { font-size: .8rem; color: var(--muted); display: grid; gap: 4px; }
 .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .88rem; }
 .flow span.b { border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; }
@@ -111,7 +111,7 @@ th { font-size: .78rem; color: var(--muted); font-weight: 700; }
   <div class="grid">
     <section class="panel" aria-labelledby="h-fac">
       <h2 id="h-fac">施設の一覧（見本）</h2>
-      <p class="label">兆しの強い順に並びます</p>
+      <p class="label">見守る順番に並びます（菌の増えやすさ×事故の重さ）</p>
       <div class="fac" id="fac"></div>
     </section>
 
@@ -135,6 +135,16 @@ th { font-size: .78rem; color: var(--muted); font-weight: 700; }
       <ul class="events" id="events"></ul>
     </section>
   </div>
+
+  <section class="panel" aria-labelledby="h-risk">
+    <h2 id="h-risk">見守る順番：菌の増えやすさ × 事故の重さ</h2>
+    <p class="sub" style="font-size:.9rem">菌が増えやすいか（壁の兆し・水の硬さ）と、事故になったときの重さ（利用する人の体の弱さ、人の多さ、止まったときの損失）を掛け合わせて、見守る順番と、人を送る順番を決めます。上下水道の管の点検の順番づけで使われる「壊れやすさ×影響」の考え方を、建物の中の水に当てはめたものです。</p>
+    <div class="two" style="gap:12px">
+      <div id="riskMap" role="img" aria-label="横軸が菌の増えやすさ、縦軸が事故の重さ。右上ほど先に見守る"></div>
+      <div class="scroll"><table id="riskTable"></table></div>
+    </div>
+    <p class="label">点数はすべて見本です。事故の重さは、利用する人（病院の患者、高齢者、宿泊者）と止まったときの影響から置いた仮の値です。</p>
+  </section>
 
   <section class="panel" aria-labelledby="h-pulse">
     <h2 id="h-pulse">1組の電極でぬめりと水あかを見分ける（仮説）</h2>
@@ -256,13 +266,23 @@ th { font-size: .78rem; color: var(--muted); font-weight: 700; }
   }
 
   const A = {}; FAC.forEach(f => A[f.id] = analyze(f));
-  const order = FAC.slice().sort((x, y) => ({ bad: 0, warn: 1, ok: 2 }[A[x.id].level] - { bad: 0, warn: 1, ok: 2 }[A[y.id].level]));
+  // 見守る順番：菌の増えやすさ（1〜5）× 事故の重さ（1〜5）
+  const IMPACT = { "病院": [5, "患者は体が弱く、重症になりやすい"], "ホテル": [4, "宿泊者が多く、浴場もある"], "商業施設": [4, "人の出入りが多い"],
+    "データセンター": [3.5, "止まったときの損失が大きい"], "工場": [3, "止まると生産が止まる"], "オフィス": [2.5, "利用者は比較的元気"] };
+  function likely(f) {
+    let v = { bad: 4, warn: 2.5, ok: 1.5 }[A[f.id].level];
+    if (f.hard > 80) v += 0.5;            // 硬い水は水あかがつきやすく、菌の足場にもなる
+    return Math.min(5, v);
+  }
+  const RISK = {};
+  FAC.forEach(f => { const l = likely(f), [im, why] = IMPACT[f.use]; RISK[f.id] = { l, im, why, score: l * im }; });
+  const order = FAC.slice().sort((x, y) => RISK[y.id].score - RISK[x.id].score);
   const LABEL = { bad: "壁に兆し", warn: "確認済み・誤報", ok: "異常なし" };
 
   const facEl = document.getElementById("fac");
   facEl.innerHTML = order.map(f => `<button type="button" data-id="${f.id}" aria-pressed="false">
       <span class="name">${f.name}</span><span class="pill ${A[f.id].level}">${LABEL[A[f.id].level]}</span>
-      <span class="meta">${f.use}｜補給水の硬さ ${f.hard} mg/L（${f.region}）</span></button>`).join("");
+      <span class="meta">${f.use}｜補給水の硬さ ${f.hard} mg/L（${f.region}）｜見守る優先度 ${RISK[f.id].score.toFixed(1)}</span></button>`).join("");
   facEl.addEventListener("click", e => { const b = e.target.closest("button"); if (b) select(b.dataset.id); });
 
   function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
@@ -350,8 +370,34 @@ th { font-size: .78rem; color: var(--muted); font-weight: 700; }
     document.getElementById("pulseLegend").innerHTML = C.map(([k, n, col]) => `<span><i style="background:${col}"></i>${n}${k === kind ? `（${f.name}）` : ""}</span>`).join("");
   }
   facEl.addEventListener("click", e => { const b = e.target.closest("button"); if (b) pulse(b.dataset.id); });
-  select(order[0].id); pulse(order[0].id);
-  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => select(document.querySelector('.fac [aria-pressed="true"]').dataset.id));
+  function riskView(id) {
+    const W = 420, H = 300, L = 46, R = 12, T = 12, B = 40;
+    const x = v => L + (W - L - R) * (v - 0) / 5, y = v => T + (H - T - B) * (1 - v / 5);
+    let g = "";
+    // 右上ほど濃い背景（掛け算の値で色を分ける）
+    for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) {
+      const sc = (i + 1) * (j + 1), op = sc >= 16 ? .28 : sc >= 9 ? .14 : .05;
+      g += `<rect x="${x(i)}" y="${y(j + 1)}" width="${x(1) - x(0)}" height="${y(0) - y(1)}" fill="${css("--wall")}" opacity="${op}"/>`;
+    }
+    for (let v = 0; v <= 5; v++) {
+      g += `<line x1="${x(v)}" x2="${x(v)}" y1="${T}" y2="${H - B}" stroke="${css("--grid")}"/><line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${css("--grid")}"/>`;
+    }
+    g += `<text x="${(L + W - R) / 2}" y="${H - 8}" text-anchor="middle" font-size="12" fill="${css("--muted")}">菌の増えやすさ →</text>`;
+    g += `<text x="14" y="${(T + H - B) / 2}" text-anchor="middle" font-size="12" fill="${css("--muted")}" transform="rotate(-90 14 ${(T + H - B) / 2})">事故の重さ →</text>`;
+    FAC.forEach(f => {
+      const r = RISK[f.id], on = f.id === id, cx = x(r.l), cy = y(r.im);
+      g += `<g data-id="${f.id}" style="cursor:pointer"><circle cx="${cx}" cy="${cy}" r="${on ? 9 : 6}" fill="${on ? css("--wall") : css("--panel")}" stroke="${css("--wall")}" stroke-width="2"/>
+        <text x="${cx + 11}" y="${cy + 4}" font-size="11" fill="${css("--ink")}">${f.name.split("・")[1]}</text></g>`;
+    });
+    const map = document.getElementById("riskMap");
+    map.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${g}</svg>`;
+    document.getElementById("riskTable").innerHTML = "<tr><th>施設</th><th>増えやすさ</th><th>重さ</th><th>掛け算</th><th>重さの理由</th></tr>" +
+      order.map(f => { const r = RISK[f.id]; return `<tr${f.id === id ? ' style="background:var(--accent-soft)"' : ""}><td>${f.name}</td><td class="n">${r.l.toFixed(1)}</td><td class="n">${r.im}</td><td class="n"><b>${r.score.toFixed(1)}</b></td><td>${r.why}</td></tr>`; }).join("");
+  }
+  document.getElementById("riskMap").addEventListener("click", e => { const g = e.target.closest("g[data-id]"); if (g) { select(g.dataset.id); pulse(g.dataset.id); riskView(g.dataset.id); } });
+  facEl.addEventListener("click", e => { const b = e.target.closest("button"); if (b) riskView(b.dataset.id); });
+  select(order[0].id); pulse(order[0].id); riskView(order[0].id);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { const id = document.querySelector('.fac [aria-pressed="true"]').dataset.id; select(id); pulse(id); riskView(id); });
 })();
 </script>
 </body>
