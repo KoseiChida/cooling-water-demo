@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>冷却水の遠隔監視 試作版</title>
+<title>冷却の水の見守り 試作版</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=BIZ+UDPGothic:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -89,8 +89,8 @@ th { font-size: .78rem; color: var(--muted); font-weight: 700; }
 <body>
 <div class="wrap">
   <header style="display:grid; gap:6px">
-    <h1>冷却水の遠隔監視 試作版</h1>
-    <p class="sub">水を測るだけでは、兆しは遅れて見えます。私たちは、配管の<b>壁</b>を測り、<b>1組の電極で膜の種類まで見分ける</b>ことを目指しています。</p>
+    <h1>冷却の水の見守り 試作版</h1>
+    <p class="sub">AIデータセンターの液冷と、建物の冷却塔の水を見守ります。水を測るだけでは、兆しは遅れて見えます。私たちは、配管の<b>壁</b>を測り、<b>1組の電極で膜の種類まで見分ける</b>ことを目指しています。</p>
     <p class="notice">施設名・数値はすべて架空の見本データです。仕組みと画面の考え方をお見せするためのもので、実際の測定結果ではありません。</p>
   </header>
 
@@ -99,7 +99,7 @@ th { font-size: .78rem; color: var(--muted); font-weight: 700; }
     <div class="layers">
       <div class="layer"><span class="tag">層1｜水を測る</span><h3>導電率・pH・水温・残留塩素・補給水の量</h3>
         <p>市販のセンサーで測れます。大手の水処理会社も、すでに測っています。ここは差がつきません。</p></div>
-      <div class="layer key"><span class="tag">層2｜壁を測る（兆しが先に出る）</span><h3>配管の内側につく生物膜</h3>
+      <div class="layer key"><span class="tag">層2｜壁を測る（兆しが先に出るかを確かめる）</span><h3>配管の内側につく生物膜</h3>
         <p>菌は水中に漂う前に、まず壁にぬめり（生物膜）をつくって増えます。壁に置いた電極に流れる電流の変化で、そのぬめりを常時とらえます。</p></div>
       <div class="layer"><span class="tag">層3｜正解を測る</span><h3>菌の活動量と、レジオネラの遺伝子</h3>
         <p>ATP検査（数分）と遺伝子検査（数時間）を定期に行い、「本当に菌が増えていたか」を確かめます。培養検査は結果まで<span style="white-space:nowrap">10〜12日</span>かかります。</p></div>
@@ -107,6 +107,81 @@ th { font-size: .78rem; color: var(--muted); font-weight: 700; }
         <p>水道水の硬さは地域で大きく違います。同じ運転でも、地域によって汚れ方が変わるため、地域ごとに補正します。</p></div>
     </div>
   </section>
+
+  <section class="panel" aria-labelledby="h-dc">
+    <h2 id="h-dc">AIデータセンターの液冷：立ち上げの初日から、壁を見守る（見本）</h2>
+    <p class="sub">AIの計算機は、冷却液を計算機の上の冷却板に直接流して冷やします。冷却液の回路の壁に電極を付け、立ち上げの初日に「きれいな壁の基準」を取り、そこからの変化を見守ります。</p>
+    <div class="flow" aria-label="冷却液の回路">
+      <span class="b">冷却液を配る装置（CDU）</span><span>→</span><span class="b">配管 <b style="color:var(--wall)">● 電極</b></span><span>→</span><span class="b">計算機の冷却板</span><span>→</span><span class="b">戻りの配管 <b style="color:var(--wall)">● 電極</b></span><span>→</span><span class="b">CDUへ戻る</span>
+    </div>
+    <div class="flow" role="group" aria-label="見本の場面を選ぶ" id="dcBtns">
+      <button class="dcb" data-k="tap" aria-pressed="true">立ち上げで水道水を誤って入れた</button>
+      <button class="dcb" data-k="bio" aria-pressed="false">運転中に菌が増えた</button>
+      <button class="dcb" data-k="ok" aria-pressed="false">異常なし</button>
+    </div>
+    <div class="kpis">
+      <div class="kpi hl"><span class="label">壁の兆しで気づく</span><span class="v" id="dcK1"></span></div>
+      <div class="kpi"><span class="label">ほかの方法で気づく</span><span class="v" id="dcK2"></span><span class="sub" style="font-size:.8rem" id="dcK2n"></span></div>
+      <div class="kpi"><span class="label">止まる・詰まる</span><span class="v" id="dcK3"></span></div>
+    </div>
+    <div class="legend"><span><i style="background:var(--wall)"></i>壁の変化（初日の基準＝1）</span><span><i style="background:var(--water)"></i>冷却液の流れやすさ（初日＝1）</span><span><i style="background:var(--accent)"></i>知らせる線</span></div>
+    <div class="scroll"><svg id="dcChart" role="img" aria-label="壁の変化と冷却液の流れやすさの推移" viewBox="0 0 760 240" style="width:100%;min-width:520px;height:auto"></svg></div>
+    <ul class="events" id="dcEv"></ul>
+    <p class="foot">場面・日数・数値はすべて架空の見本です。「水道水を誤って入れ、約2週間で冷却板が詰まった」という報道（Capacity誌 2026年8月）を参考に組み立てました。電極が冷却液の中で測れるか、壁の兆しが本当に先に出るかは、これから実験と実証で確かめます。</p>
+  </section>
+  <style>
+  .dcb { font: inherit; font-size: .88rem; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+  .dcb[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); font-weight: 700; }
+  .dcb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  </style>
+  <script>
+  (function () {
+    const S = {
+      tap: { days: 21, wallStart: 2, wallRate: 0.12, flowStart: 9, flowRate: 0.06, stop: 14,
+        other: [17, "17日目", "手で採った液の検査の結果（採取は14日目）"],
+        ev: [[0, "立ち上げ。電極で初日の基準を取る", 0], [0, "誤って水道水で充填（気づかれない）", 0], [5, "壁の値が知らせる線を超える：水あか型の変化。液の入れ替えを提案", 1],
+             [12, "冷却液の流れが落ち、計算機の温度が上がり始める", 0], [14, "冷却板が詰まり、計算機を止める", 0], [17, "手で採った液の検査で原因が分かる", 0]] },
+      bio: { days: 45, wallStart: 12, wallRate: 0.05, flowStart: 30, flowRate: 0.025, stop: 42,
+        other: [30, "30日目", "月1回の液の検査（菌の数）"],
+        ev: [[0, "立ち上げ。電極で初日の基準を取る", 0], [10, "補充した水から菌が入る", 0], [22, "壁の値が知らせる線を超える：ぬめり型の変化。菌の検査と殺菌を提案", 1],
+             [30, "月1回の液の検査で菌の増加が分かる", 0], [36, "冷却液の流れが落ち始める", 0], [42, "冷却板の詰まりで、計算機を止める", 0]] },
+      ok: { days: 30, wallStart: 99, wallRate: 0, flowStart: 99, flowRate: 0, stop: null, other: null,
+        ev: [[0, "立ち上げ。電極で初日の基準を取る", 0], [30, "壁・流れとも初日の基準どおり。毎月の報告を自動で作る", 1]] },
+    };
+    const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+    function draw(k) {
+      const s = S[k], W = 760, H = 240, L = 40, R = 12, T = 12, B = 28, maxY = 2.2;
+      let r = 7; const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
+      const wall = [], flow = [];
+      for (let d = 0; d <= s.days; d++) {
+        wall.push(1 + (d > s.wallStart ? Math.min(1.1, s.wallRate * (d - s.wallStart)) : 0) + (rnd() - .5) * .06);
+        flow.push(Math.max(0.15, 1 - (d > s.flowStart ? s.flowRate * (d - s.flowStart) * (k === "tap" ? 2 : 1.6) : 0)) + (rnd() - .5) * .03);
+      }
+      const x = d => L + (W - L - R) * d / s.days, y = v => T + (H - T - B) * (1 - v / maxY);
+      const path = a => a.map((v, d) => (d ? "L" : "M") + x(d).toFixed(1) + " " + y(v).toFixed(1)).join(" ");
+      let g = "";
+      for (let v = 0; v <= 2; v += 0.5) g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${css("--grid")}"/><text x="${L - 6}" y="${y(v) + 4}" font-size="11" text-anchor="end" fill="${css("--muted")}">${v}</text>`;
+      for (let d = 0; d <= s.days; d += (s.days > 30 ? 10 : 5)) g += `<text x="${x(d)}" y="${H - 8}" font-size="11" text-anchor="middle" fill="${css("--muted")}">${d}日</text>`;
+      g += `<line x1="${L}" x2="${W - R}" y1="${y(1.3)}" y2="${y(1.3)}" stroke="${css("--accent")}" stroke-dasharray="5 4"/>`;
+      if (s.stop) g += `<line x1="${x(s.stop)}" x2="${x(s.stop)}" y1="${T}" y2="${H - B}" stroke="${css("--bad")}" stroke-width="2"/><text x="${x(s.stop) - 4}" y="${H - B - 6}" font-size="11" text-anchor="end" fill="${css("--bad")}">止まる</text>`;
+      g += `<path d="${path(flow)}" fill="none" stroke="${css("--water")}" stroke-width="2"/><path d="${path(wall)}" fill="none" stroke="${css("--wall")}" stroke-width="2.5"/>`;
+      const alert = wall.findIndex(v => v > 1.3);
+      if (alert > 0) g += `<circle cx="${x(alert)}" cy="${y(wall[alert])}" r="5" fill="${css("--wall")}"/>`;
+      document.getElementById("dcChart").innerHTML = g;
+      document.getElementById("dcK1").innerHTML = alert > 0 ? `${alert}<small>日目</small>` : "異常なし";
+      document.getElementById("dcK2").innerHTML = s.other ? `${s.other[0]}<small>日目</small>` : "—";
+      document.getElementById("dcK2n").textContent = s.other ? s.other[2] : "";
+      document.getElementById("dcK3").innerHTML = s.stop ? `${s.stop}<small>日目</small>` : "なし";
+      document.getElementById("dcEv").innerHTML = s.ev.map(e => `<li><span class="d">${e[0]}日目</span><span class="${e[2] ? "us" : ""}">${e[1]}</span></li>`).join("");
+      document.querySelectorAll(".dcb").forEach(b => b.setAttribute("aria-pressed", b.dataset.k === k));
+    }
+    document.querySelectorAll(".dcb").forEach(b => b.addEventListener("click", () => draw(b.dataset.k)));
+    draw("tap");
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => draw(document.querySelector('.dcb[aria-pressed="true"]').dataset.k));
+  })();
+  </script>
+
+  <h2 style="margin-top:8px">建物の冷却塔で、実績とデータを貯める（見本）</h2>
 
   <div class="grid">
     <section class="panel" aria-labelledby="h-fac">
